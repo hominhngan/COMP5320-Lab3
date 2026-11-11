@@ -31,11 +31,11 @@ class TaskService:
         channel = self._channels[assignee.preferred_channel]
         task = self._repository.get(task_id)
         assigned = replace(task, assignee_id=assignee.id)
-        # Review this interaction against R1-R4 before accepting the design.
+        # R1-R3: commit first; SaveError propagates before any send attempt.
+        self._repository.save(assigned)
         try:
             channel.send(assignee.contact,
                          f'You were assigned: {assigned.title}')
         except Exception:
             logger.warning('notification failed for task %s', assigned.id)
-        self._repository.save(assigned)
         return assigned
