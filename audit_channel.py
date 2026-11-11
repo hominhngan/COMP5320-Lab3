@@ -10,4 +10,5 @@ class AuditedChannel:
     def send(self, recipient: str, message: str) -> None:
         # Delegate once. Only after success, append 'notification.accepted'.
         # Propagate any delegate exception; record no event on failure.
-        raise NotImplementedError('Complete Lab 4')
+        self._channel.send(recipient, message)
+        self.events.append('notification.accepted')
