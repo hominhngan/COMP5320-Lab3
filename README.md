@@ -1,166 +1,128 @@
-# Design, Architecture and Patterns with AI Agents
+# COMP5320 Lab 3: Design, Architecture and Patterns with AI Agents
 
-**Postgraduate software engineering · 60 minutes · Python 3.11+ · Standard library only**
+**Student:** Ho Thi Minh Ngan
+**Student ID:** V202603134
+**Course:** COMP5320 Advanced Software Engineering, Week 3
+**Submission type:** Individual
 
-Repair and extend a task-assignment service. Use requirements, UML and tests
-to evaluate an AI agent's design and defend your own engineering decisions.
+Dear Professor,
 
-| Time | Activity | Evidence |
-| --- | --- | --- |
-| 0–5 | Setup and design brief | Identify policy and infrastructure boundaries |
-| 5–17 | Lab 1 — Correct the interaction | 3 tests pass |
-| 17–27 | Lab 2 — Extend with Strategy | 3 tests pass; service unchanged |
-| 27–37 | Lab 3 — Verify failure boundaries | 3 tests pass |
-| 37–47 | Lab 4 — Compose with Decorator | 3 tests pass; service unchanged |
-| 47–57 | UML and architecture review | Sequence diagram and decision record |
-| 57–60 | Final checks and submission | All 12 tests pass |
+This repository contains my submission for Lab 3. I repaired and extended the
+task-assignment service according to requirements R1 to R5 and R7, completed the
+sequence diagram, and wrote the design decision record, including my answer to
+the changed requirement R6. All 12 provided tests pass on my machine, and I
+explain my reasoning for each lab below.
 
-## Setup
+## How to run the tests
 
-Run from the downloaded ZIP's directory:
+The project uses Python 3.11 and the standard library only. From this folder:
 
 ```sh
-unzip ai_agents_lab_60min_students.zip
-cd ai_agents_lab_60min
-python3 --version
-python3 test_lab.py all
+python test_lab.py all
 ```
 
-Windows: use **Extract All**, open the extracted folder in a terminal, and
-replace `python3` with `py -3`. No packages or API keys are needed.
-Initial failures are expected: the starter contains two service defects and
-unfinished push and audit adapters. One test file covers all four labs.
+On Windows, `py -3 test_lab.py all` also works. To check a single lab, replace
+`all` with `1`, `2`, `3` or `4`. The output of my final run is saved in
+`test_results.txt` (Ran 12 tests, OK).
 
-## Design brief
+## Submitted files
 
-One small team owns one application release and one database. Assign a task,
-save it, then notify its assignee. Offline adapters replace database and network I/O.
-
-| Contract | Required behavior |
+| File | Purpose |
 | --- | --- |
-| R1–R2 | Save before notifying on the preferred channel. |
-| R3 | Propagate `SaveError`; make zero send attempts if saving fails. |
-| R4 | `NotificationError` preserves the assignment; return normally without retry. |
-| R5 | Register new channels without editing `TaskService`. |
-| R7 | An audit wrapper delegates once and records acceptance only after success. |
+| `service.py` | Labs 1 and 3: corrected ordering and failure boundaries in `TaskService` |
+| `push_channel.py` | Lab 2: new `PushChannel` notification strategy |
+| `audit_channel.py` | Lab 4: `AuditedChannel` decorator |
+| `sequence.mmd` | Sequence diagram for the success, `SaveError` and `NotificationError` paths |
+| `DECISIONS.md` | Design decision record (within 200 words) |
+| `test_results.txt` | Output of `python test_lab.py all` |
 
-**Principles.** Single responsibility (SRP) separates policy from I/O.
-Dependency inversion (DIP) makes the service depend on interfaces. Strategy
-varies delivery behavior; the open/closed principle (OCP) keeps that variation
-outside the service. Decorator adds behavior around an existing channel.
-Observer supports independent subscribers. A modular monolith keeps modules
-in one application deployable.
+The remaining files (`models.py`, `adapters.py`, `test_lab.py`, `AGENTS.md`) are
+the provided starter materials, and I did not modify them.
 
-```mermaid
-classDiagram
-    class TaskRepository {
-        <<interface>>
-    }
-    class NotificationChannel {
-        <<interface>>
-    }
-    TaskService ..> TaskRepository : uses
-    TaskService ..> NotificationChannel : uses
-    TaskRepository <|.. InMemoryRepository
-    NotificationChannel <|.. RecordingChannel
-    NotificationChannel <|.. PushChannel
-    NotificationChannel <|.. AuditedChannel
-    AuditedChannel --> NotificationChannel : wraps
-```
+## Commit history
 
-## Lab 1 — Correct the interaction
+I committed each lab separately so that every step can be reviewed on its own
+diff, as the lab instructions require:
 
-**Edit:** `service.py`.
+1. Starter pack as provided
+2. Lab 1: changes only `service.py`
+3. Lab 2: changes only `push_channel.py`
+4. Lab 3: changes only `service.py`
+5. Lab 4: changes only `audit_channel.py`
+6. Sequence diagram, decision record and test results
 
-Correct `assign_task` so R1–R3 hold. Preserve the injected interfaces and
-exact message `You were assigned: <task title>`. Keep infrastructure outside the service.
+## Lab 1: Correcting the interaction (R1 to R3)
 
-```sh
-python3 test_lab.py 1
-```
+In the starter code, `assign_task` sent the notification before saving the task.
+If the save then failed, the assignee would have been told about an assignment
+that was never stored. I moved `self._repository.save(assigned)` before the call
+to `channel.send(...)`, so the order is now `get`, `save`, `send`. If `save`
+raises `SaveError`, the exception propagates and no send is attempted.
 
-**Accept when:** 3 tests pass. Inspect `get → save → send` and zero send
-attempts after a failed save. Explain which responsibility belongs to each object.
+Responsibilities stay separated (SRP): `TaskService` owns the ordering and
+failure policy, the repository owns storage, and the channel owns delivery. The
+service still receives its collaborators through the injected interfaces (DIP).
 
-## Lab 2 — Extend with Strategy
+**Evidence:** `test_save_happens_before_send` checks the trace
+`['get', 'save', 'send']`, and `test_save_failure_propagates_without_any_send_attempt`
+checks that `email.attempts` is 0 after a failed save.
 
-**Edit:** `push_channel.py`.
+## Lab 2: Extending delivery with Strategy (R5)
 
-Implement `PushChannel.send`: append each accepted `(recipient, message)` to
-`self.sent`. The test registers `{'push': push}`. Keep `service.py` unchanged.
+I implemented `PushChannel.send` so that it appends each `(recipient, message)`
+pair to `self.sent`. No change to `TaskService` was needed: the test simply
+registers `{'push': push}`, and the service selects the channel from the
+assignee's preference. Strategy absorbs the change "add a new delivery method",
+and registration belongs in the startup or composition code, not in the service.
+This step's diff touches only `push_channel.py`, which shows the open/closed
+principle at this boundary.
 
-```sh
-python3 test_lab.py 2
-```
+## Lab 3: Verifying failure boundaries (R4)
 
-**Accept when:** 3 tests pass and the diff shows only the push adapter changed
-in this step. Explain the change Strategy absorbs and where registration belongs.
+I narrowed the handler from `except Exception` to `except NotificationError`.
+When delivery fails in the expected way, the service logs a warning that
+contains only the task id (no contact details), keeps the saved assignment and
+returns it normally. It does not retry.
 
-## Lab 3 — Verify failure boundaries
+A broad `except Exception` would also swallow programming errors. The test
+`test_unexpected_provider_bug_remains_visible_after_save` uses a channel that
+raises `RuntimeError`; with the broad handler this defect would be hidden and
+only a warning would appear. With the narrow handler the error propagates, while
+the assignment remains saved.
 
-**Edit:** `service.py`.
+## Lab 4: Composing a channel with Decorator (R7)
 
-Handle only `NotificationError` from delivery: log a warning without contact
-details, retain the saved task and return it. Attempt once. Let unexpected
-programming errors propagate. Preserve R3.
+`AuditedChannel.send` delegates exactly once to the wrapped channel and appends
+`notification.accepted` to `self.events` only after the delegate returns
+successfully. If the delegate raises, the exception propagates and no event is
+recorded. The wrapper is injected as a normal channel, so neither `TaskService`
+nor `PushChannel` changed.
 
-```sh
-python3 test_lab.py 3
-```
-
-**Accept when:** 3 tests pass. Read one failure assertion yourself and explain
-why a broad `except Exception` hides defects.
-
-## Lab 4 — Compose with Decorator
-
-**Edit:** `audit_channel.py`.
-
-Implement `AuditedChannel.send`: delegate once to `self._channel`, then append
-`notification.accepted` to `self.events`. On failure, propagate the exception
-and record nothing. Inject the wrapper as a normal channel. Keep the service
-and push adapter unchanged.
-
-```sh
-python3 test_lab.py 4
-```
-
-**Accept when:** 3 tests pass. Explain why this is Decorator rather than a new
-Strategy. This in-memory acceptance record is not a durable audit log.
+I consider this a Decorator rather than a new Strategy because it does not
+choose a different delivery behavior. It wraps a channel that has already been
+chosen and adds behavior around it while keeping the same `send` contract. I
+also note that this in-memory record is not a durable audit log.
 
 ## UML and architecture review
 
-Complete `sequence.mmd`: show success, `SaveError` with no send, and
-`NotificationError` with a normal task return. Match participants and message
-order to the code. Annotate that `save` models a completed commit.
+`sequence.mmd` shows the three paths of `assign_task`: success, `SaveError` with
+no send, and `NotificationError` with a normal return. The participant names and
+message order follow the code, and a note states that a returned `save` models a
+completed commit.
 
-Complete `DECISIONS.md` in at most 200 words. Compare a modular monolith with
-microservices, distinguish the patterns, and address this change request:
+`DECISIONS.md` defends a modular monolith for this project, distinguishes
+Strategy, Decorator and Observer, and outlines a transactional outbox for R6,
+including why a relay crash after provider acceptance can cause a duplicate
+notification.
 
-**R6:** Notification intent must survive a process crash after commit. Assume
-the worker and provider recover and the destination is valid.
+## Use of the AI agent and remaining limitations
 
-Outline an atomic task-plus-outbox write and a relay. Explain the duplicate
-risk if the relay crashes after provider acceptance but before recording completion.
-No outbox implementation is required. Review the UML and decision record manually;
-the Python tests establish neither architectural quality nor real DB durability.
+I used Claude Code as an AI assistant during this lab. I checked its changes
+against the requirements, inspected each diff, and ran the tests myself. The
+offline tests use in-memory adapters, so they do not verify real database commit
+durability, real provider behavior or crash recovery. R6 is addressed only at the
+design level, as the lab specifies, and no outbox is implemented.
 
-## Use the agent
+Thank you for reviewing my submission.
 
-```text
-Read README.md and test_lab.py. For Lab [1/2/3/4], explain the smallest change
-and the principle it serves, then edit only the permitted file. Preserve
-contracts and tests. Report actual commands/results and one remaining limitation.
-```
-
-For corrections, provide the actual failed assertion. If no agent is available,
-make the same changes manually and record that route.
-
-## Submit
-
-```sh
-python3 test_lab.py all
-python3 test_lab.py all > test_results.txt 2>&1
-```
-
-Submit `service.py`, `push_channel.py`, `audit_channel.py`, `sequence.mmd`,
-`DECISIONS.md`, and `test_results.txt`. Expected final result: **12 tests, OK**.
+Ho Thi Minh Ngan
