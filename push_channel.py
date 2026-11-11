@@ -7,4 +7,4 @@ class PushChannel:
     def send(self, recipient: str, message: str) -> None:
         # Record the accepted request as a (recipient, message) tuple.
         # This is a local simulation; do not call a real push provider.
-        raise NotImplementedError('Complete exercise 2')
+        self.sent.append((recipient, message))
