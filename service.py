@@ -33,9 +33,11 @@ class TaskService:
         assigned = replace(task, assignee_id=assignee.id)
         # R1-R3: commit first; SaveError propagates before any send attempt.
         self._repository.save(assigned)
+        # R4: only the expected NotificationError is absorbed (one attempt,
+        # no retry, no contact details logged); other errors stay visible.
         try:
             channel.send(assignee.contact,
                          f'You were assigned: {assigned.title}')
-        except Exception:
+        except NotificationError:
             logger.warning('notification failed for task %s', assigned.id)
         return assigned
