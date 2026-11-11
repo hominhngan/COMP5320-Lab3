@@ -3,4 +3,28 @@ sequenceDiagram
     participant Service as TaskService
     participant Repository as TaskRepository
     participant Channel as NotificationChannel
-    Note over Caller,Channel: Complete the success and failure interactions
+
+    Caller->>Service: assign_task(task_id, assignee)
+    Service->>Service: select channel by assignee.preferred_channel
+    Service->>Repository: get(task_id)
+    Repository-->>Service: task
+    Service->>Service: assigned = replace(task, assignee_id)
+    Service->>Repository: save(assigned)
+    Note right of Repository: save returning models a completed commit
+
+    alt Success (R1-R2)
+        Repository-->>Service: committed
+        Service->>Channel: send(contact, "You were assigned: <title>")
+        Channel-->>Service: accepted
+        Service-->>Caller: assigned task
+    else SaveError (R3)
+        Repository-->>Service: raise SaveError (no persisted change)
+        Note over Service,Channel: zero send attempts
+        Service-->>Caller: propagate SaveError
+    else NotificationError (R4)
+        Repository-->>Service: committed
+        Service->>Channel: send(contact, "You were assigned: <title>")
+        Channel-->>Service: raise NotificationError
+        Service->>Service: log warning (task id only, no contact, no retry)
+        Service-->>Caller: assigned task (normal return)
+    end
